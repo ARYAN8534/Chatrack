@@ -11,13 +11,20 @@ const UserSchema = new mongoose.Schema(
     },
     email: {
       type: String,
-      sparse: true, // This allows multiple null values
+      unique: true,
+      sparse: true,
       trim: true,
+      lowercase: true,
+      match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, "Please add a valid email"],
     },
     password: {
       type: String,
+      minlength: [6, "Password must be at least 6 characters"],
+    },
+    appId: {
+      type: String,
+      unique: true,
       required: true,
-      minlength: 6,
     },
     name: {
       type: String,
@@ -26,7 +33,7 @@ const UserSchema = new mongoose.Schema(
     },
     avatar: {
       type: String,
-      default: "/placeholder.svg?height=100&width=100",
+      default: "",
     },
     age: {
       type: Number,
@@ -36,7 +43,7 @@ const UserSchema = new mongoose.Schema(
     gender: {
       type: String,
       enum: ["male", "female", "other", "prefer not to say"],
-      required: true,
+      default: "prefer not to say",
     },
     about: {
       type: String,
@@ -88,10 +95,25 @@ const UserSchema = new mongoose.Schema(
         ref: "User",
       },
     ],
-    createdAt: {
-      type: Date,
-      default: Date.now,
-    },
+    // Friend system
+    friends: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    sentFriendRequests: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    receivedFriendRequests: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
     // OTP for phone verification
     otp: {
       code: {
@@ -107,12 +129,10 @@ const UserSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    // For password reset
-    resetPasswordToken: String,
-    resetPasswordExpire: Date,
   },
   {
     timestamps: true,
+    strictPopulate: false, // Add this to fix the populate error
   },
 )
 
@@ -121,13 +141,12 @@ UserSchema.index({ location: "2dsphere" })
 
 // Hash password before saving
 UserSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) {
+  if (!this.isModified("password") || !this.password) {
     next()
   }
 
   const salt = await bcrypt.genSalt(10)
   this.password = await bcrypt.hash(this.password, salt)
-  next()
 })
 
 // Method to check if OTP is valid
@@ -154,6 +173,7 @@ UserSchema.methods.generateOTP = function () {
 
 // Method to match password
 UserSchema.methods.matchPassword = async function (enteredPassword) {
+  if (!this.password) return false
   return await bcrypt.compare(enteredPassword, this.password)
 }
 
